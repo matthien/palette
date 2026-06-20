@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>palette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: 'Geist', 'Inter', system-ui, sans-serif;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── SCREENS ── */
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.screen.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ────────────────────────────────────────
+   GRADIENT BACKGROUND (shared)
+──────────────────────────────────────── */
+@property --bg-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.conic-wrap {
+  position: absolute;
+  inset: -20%;
+  background: conic-gradient(
+    from var(--bg-angle),
+    #9933E5 0%,
+    #C62DB2 12.5%,
+    #F22680 25%,
+    #F54066 37.5%,
+    #F7594D 50%,
+    #E8466C 62.5%,
+    #D9338C 75%,
+    #B933B9 87.5%,
+    #9933E5 100%
+  );
+  filter: blur(72px);
+  animation: conicSpin 28s linear infinite;
+  will-change: background;
+}
+@keyframes conicSpin {
+  to { --bg-angle: 360deg; }
+}
+
+/* ────────────────────────────────────────
+   LANDING — frame 14:4
+──────────────────────────────────────── */
+#landing {
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.landing-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 80% at 50% 50%, transparent 35%, rgba(8,0,18,0.38) 100%);
+  pointer-events: none;
+}
+
+.landing-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
+
+.tagline {
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+  text-align: center;
+  color: #fff;
+}
+
+/* Input — h-[64px], bg rgba(255,255,255,0.15), border rgba(255,255,255,0.28) */
+.input-wrap {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 999px;
+  height: 64px;
+  padding: 8px 8px 8px 16px;
+  gap: 12px;
+  width: min(520px, 88vw);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: border-color 0.25s, background 0.25s;
+}
+.input-wrap:focus-within {
+  border-color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.2);
+}
+
+.url-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.85);
+}
+.url-input::placeholder { color: rgba(255,255,255,0.45); }
+
+/* Generate CTA — bg white, Inter SemiBold 12px */
+.gen-btn {
+  flex-shrink: 0;
+  background: #fff;
+  color: #0a0a0a;
+  border: none;
+  border-radius: 999px;
+  height: 48px;
+  padding: 0 22px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.gen-btn:hover  { opacity: 0.88; transform: scale(1.02); }
+.gen-btn:active { transform: scale(0.97); }
+
+/* ────────────────────────────────────────
+   LOADING
+──────────────────────────────────────── */
+#loading {
+  flex-direction: column;
+  gap: 22px;
+  overflow: hidden;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(6,0,14,0.52);
+  pointer-events: none;
+}
+
+.dots-loader {
+  position: relative; z-index: 1;
+  display: flex; gap: 7px;
+}
+.dots-loader i {
+  display: block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.6);
+  animation: dotpop 1.4s ease-in-out infinite;
+}
+.dots-loader i:nth-child(2) { animation-delay: 0.18s; }
+.dots-loader i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes dotpop {
+  0%,80%,100% { transform: scale(0.7); opacity: 0.3; }
+  40%          { transform: scale(1.3); opacity: 1; }
+}
+
+.load-text {
+  position: relative; z-index: 1;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.55);
+  transition: opacity 0.28s;
+}
+
+/* ────────────────────────────────────────
+   RESULTS — frame 12:93
+──────────────────────────────────────── */
+#results { overflow: hidden; }
+
+.result-bg {
+  position: absolute;
+  inset: -8%;
+  animation: bgdrift 55s ease-in-out infinite alternate;
+}
+@keyframes bgdrift {
+  0%   { transform: scale(1)     translate(0%,    0%); }
+  25%  { transform: scale(1.02)  translate( 0.8%, -0.8%); }
+  75%  { transform: scale(1.03)  translate(-0.8%,  0.8%); }
+  100% { transform: scale(1.015) translate( 0.4%,  0.4%); }
+}
+
+/* Playlist header — bg rgba(255,255,255,0.15), rounded-[8px], p-[16px], gap-[8px] */
+.plist-header {
+  position: absolute;
+  top: 16px; left: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 16px;
+}
+/* YOUR PLAYLIST — 9px, tracking-[2px], rgba(255,255,255,0.75), Inter Medium */
+.plist-label {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.75);
+  text-transform: uppercase;
+}
+/* Playlist name — 16px, white, Inter Medium */
+.plist-name {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* Song dots layer */
+.dots-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
+
+/* Floating circles — 44px default, 88px hover */
+.sdot {
+  position: absolute;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.32);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: sdotpop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  transition:
+    width        0.28s cubic-bezier(0.34,1.56,0.64,1),
+    height       0.28s cubic-bezier(0.34,1.56,0.64,1),
+    border-color 0.2s,
+    box-shadow   0.2s;
+}
+@keyframes sdotpop {
+  0%   { opacity: 0; transform: translate(-50%,-50%) scale(0); }
+  100% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+}
+.sdot:hover {
+  width: 88px; height: 88px;
+  border-color: rgba(255,255,255,0.6);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 4px 24px rgba(0,0,0,0.18);
+  z-index: 20;
+}
+
+.sdot-center {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  pointer-events: none;
+  transition:
+    width  0.28s cubic-bezier(0.34,1.56,0.64,1),
+    height 0.28s cubic-bezier(0.34,1.56,0.64,1);
+}
+.sdot:hover .sdot-center {
+  width: 14px; height: 14px;
+}
+
+/* Tooltip — rgba(8,4,18,0.75), border rgba(255,255,255,0.15), rounded-[12px]
+   pl-[16px] pr-[32px] py-[16px], gap-[16px] between sections — frame 12:93 */
+.tip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 16px);
+  transform: translateY(-50%);
+  background: rgba(8,4,18,0.75);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 16px 32px 16px 16px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  z-index: 30;
+}
+.tip.tip-left {
+  left: auto;
+  right: calc(100% + 16px);
+}
+.sdot:hover .tip { opacity: 1; }
+
+/* Song name — Geist Medium, 16px */
+.tip-title {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: #fff;
+  line-height: 1;
+}
+/* Artist — Geist Regular, 14px, rgba(255,255,255,0.48) */
+.tip-artist {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.48);
+  margin-top: 4px;
+  line-height: 1;
+}
+/* Color row — gap-[4px], 16px margin-top */
+.tip-hex {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 16px;
+}
+/* 12px color swatch */
+.hex-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Geist Mono Regular, 12px, rgba(255,255,255,0.38) */
+.hex-val {
+  font-family: 'Geist Mono', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.38);
+  letter-spacing: 0.02em;
+}
+
+/* Back button — prototype navigation only */
+.back-btn {
+  position: absolute;
+  bottom: 24px; right: 24px;
+  z-index: 30;
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 100px;
+  padding: 9px 18px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.back-btn:hover {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.22);
+  color: #fff;
+}
+</style>
+</head>
+<body>
+
+<!-- ── LANDING — frame 14:4 ── -->
+<div class="screen active" id="landing">
+  <div class="conic-wrap"></div>
+  <div class="landing-vignette"></div>
+  <div class="landing-inner">
+    <h1 class="tagline">Find your musical<br>color palette.</h1>
+    <div class="input-wrap">
+      <input
+        class="url-input"
+        id="urlInput"
+        type="text"
+        placeholder="Paste Spotify playlist link here…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="gen-btn" id="genBtn">Generate  →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LOADING ── -->
+<div class="screen" id="loading">
+  <div class="blob-bg">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="blob b4"></div>
+    <div class="blob b5"></div>
+  </div>
+  <div class="loading-overlay"></div>
+  <div class="dots-loader"><i></i><i></i><i></i></div>
+  <p class="load-text" id="loadText">reading your playlist…</p>
+</div>
+
+<!-- ── RESULTS — frame 12:93 ── -->
+<div class="screen" id="results">
+  <div class="result-bg" id="resultBg"></div>
+
+  <div class="plist-header">
+    <p class="plist-label">Your Playlist</p>
+    <span class="plist-name" id="plistName">—</span>
+  </div>
+
+  <div class="dots-layer" id="dotsLayer"></div>
+  <button class="back-btn" id="backBtn">← new playlist</button>
+</div>
+
+<script>
+const PLAYLIST_NAME = 'late august drives';
+
+const SONGS = [
+  { title: 'Night Drive',       artist: 'Mk.gee',                        color: '#9B2FCA', x: 0.10, y: 0.24 },
+  { title: 'Blood Orange',      artist: 'Frank Ocean',                   color: '#FF4500', x: 0.76, y: 0.28 },
+  { title: 'Slow Burn',         artist: 'Kacey Musgraves',               color: '#E8826A', x: 0.43, y: 0.41 },
+  { title: 'Ultraviolet',       artist: 'Starcrawler',                   color: '#6A0DAD', x: 0.26, y: 0.58 },
+  { title: 'Crash',             artist: 'Usher',                         color: '#C0392B', x: 0.60, y: 0.64 },
+  { title: 'Desert Rain',       artist: 'FKA Twigs',                     color: '#D4A017', x: 0.18, y: 0.74 },
+  { title: 'Something',         artist: 'The Beatles',                   color: '#2E86AB', x: 0.83, y: 0.50 },
+  { title: 'Afterimage',        artist: 'Rush',                          color: '#7B68EE', x: 0.53, y: 0.79 },
+  { title: 'Neon Haze',         artist: 'FKA Twigs',                     color: '#FF6EC7', x: 0.86, y: 0.71 },
+  { title: 'Half Light',        artist: 'Sufjan Stevens',                color: '#B0C4DE', x: 0.36, y: 0.26 },
+  { title: 'Retrograde',        artist: 'James Blake',                   color: '#4169E1', x: 0.05, y: 0.49 },
+  { title: 'Superstar',         artist: 'Sheryl Crow',                   color: '#FF8C00', x: 0.66, y: 0.21 },
+];
+
+const LOAD_MSGS = [
+  'reading your playlist…',
+  'extracting album art…',
+  'picking dominant colors…',
+  'feeling the vibe…',
+  'mixing the palette…',
+];
+
+let loadTimer, loadInterval;
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function generate() {
+  showScreen('loading');
+  let i = 0;
+  const el = document.getElementById('loadText');
+  el.textContent = LOAD_MSGS[0];
+  el.style.opacity = '1';
+
+  loadInterval = setInterval(() => {
+    el.style.opacity = '0';
+    setTimeout(() => {
+      i = (i + 1) % LOAD_MSGS.length;
+      el.textContent = LOAD_MSGS[i];
+      el.style.opacity = '1';
+    }, 280);
+  }, 750);
+
+  loadTimer = setTimeout(() => {
+    clearInterval(loadInterval);
+    buildResults();
+    showScreen('results');
+  }, 3500);
+}
+
+function buildResults() {
+  document.getElementById('plistName').textContent = PLAYLIST_NAME;
+  buildGradient();
+  buildDots();
+}
+
+function buildGradient() {
+  const stops = SONGS.map(s => {
+    const x = (s.x * 100).toFixed(1);
+    const y = (s.y * 100).toFixed(1);
+    return `radial-gradient(circle at ${x}% ${y}%, ${s.color}C0 0%, transparent 46%)`;
+  });
+  document.getElementById('resultBg').style.background =
+    stops.join(', ') + ', #080410';
+}
+
+function buildDots() {
+  const layer = document.getElementById('dotsLayer');
+  layer.innerHTML = '';
+
+  SONGS.forEach((song, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'sdot';
+    dot.style.left            = (song.x * 100) + '%';
+    dot.style.top             = (song.y * 100) + '%';
+    dot.style.backgroundColor = song.color + '22';
+    dot.style.borderColor     = song.color + '99';
+    dot.style.animationDelay  = (550 + i * 60) + 'ms';
+
+    const center = document.createElement('div');
+    center.className = 'sdot-center';
+    center.style.background = song.color;
+
+    const tipLeft = song.x > 0.60;
+    const tip = document.createElement('div');
+    tip.className = tipLeft ? 'tip tip-left' : 'tip';
+    tip.innerHTML =
+      `<div class="tip-title">${song.title}</div>` +
+      `<div class="tip-artist">${song.artist}</div>` +
+      `<div class="tip-hex">` +
+        `<div class="hex-dot" style="background:${song.color}"></div>` +
+        `<span class="hex-val">${song.color}</span>` +
+      `</div>`;
+
+    dot.appendChild(center);
+    dot.appendChild(tip);
+    layer.appendChild(dot);
+  });
+}
+
+function goBack() {
+  clearTimeout(loadTimer);
+  clearInterval(loadInterval);
+  document.getElementById('urlInput').value = '';
+  showScreen('landing');
+}
+
+document.getElementById('genBtn').addEventListener('click', generate);
+document.getElementById('backBtn').addEventListener('click', goBack);
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') generate();
+});
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('results').classList.contains('active')) buildGradient();
+});
+</script>
+</body>
+</html>
