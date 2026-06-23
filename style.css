@@ -94,6 +94,32 @@ html, body {
 .spotify-btn:active { transform: scale(0.97); }
 .spotify-icon { flex-shrink: 0; }
 
+/* ── LOGOUT ── */
+.logout-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 30;
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 100px;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.logout-btn:hover {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.22);
+  color: #fff;
+}
+
 /* ── PICKER ── */
 #picker {
   align-items: flex-start;
@@ -444,7 +470,7 @@ html, body {
   position: absolute;
   width: 44px; height: 44px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.32);
+  border: 1.5px solid rgba(255,255,255,0.15);
   transform: translate(-50%, -50%);
   cursor: pointer;
   opacity: 0;
@@ -464,7 +490,8 @@ html, body {
 }
 .sdot:hover {
   width: 88px; height: 88px;
-  border-color: rgba(255,255,255,0.6);
+  background-color: var(--song-color) !important;
+  border-color: transparent !important;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 4px 24px rgba(0,0,0,0.18);
   z-index: 20;
 }
@@ -478,7 +505,10 @@ html, body {
     width  0.28s cubic-bezier(0.34,1.56,0.64,1),
     height 0.28s cubic-bezier(0.34,1.56,0.64,1);
 }
-.sdot:hover .sdot-center { width: 14px; height: 14px; }
+.sdot:hover .sdot-center {
+  width: 14px; height: 14px;
+  background: #fff !important;
+}
 
 /* ── TOOLTIP ── */
 .tip {
