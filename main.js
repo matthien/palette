@@ -250,13 +250,30 @@ async function buildPalette(tracks) {
   const origToSorted = {};
   top5.forEach((c,si) => { origToSorted[c.origIdx] = si; });
 
-  const palette = top5.map(c => ({ hex: c.hex, count: c.count }));
-  const songs = valid.map((v,i) => ({
-    title:      v.track.name,
-    artist:     v.track.artists[0]?.name || '',
-    color:      v.hex,
-    clusterIdx: origToSorted[assignments[i]] ?? -1,
-  }));
+  const palette   = top5.map(c => ({ hex: c.hex, count: c.count }));
+  const top5Labs  = top5.map(c => c.lab);
+
+  const songs = valid.map((v, i) => {
+    let clusterIdx = origToSorted[assignments[i]];
+    if (clusterIdx === undefined) {
+      const songLab = hexToLab(v.hex);
+      let minDist = Infinity;
+      top5Labs.forEach((lab, j) => {
+        const d = labDist(songLab, lab);
+        if (d < minDist) { minDist = d; clusterIdx = j; }
+      });
+    }
+    return {
+      title:     v.track.name,
+      albumId:   v.track.album.id,
+      albumName: v.track.album.name,
+      albumUrl:  v.track.album.external_urls?.spotify || null,
+      artist:    v.track.artists[0]?.name || '',
+      color:     v.hex,
+      coverUrl:  (v.track.album.images[1] ?? v.track.album.images[0])?.url || null,
+      clusterIdx,
+    };
+  });
 
   return { palette, songs };
 }
@@ -320,6 +337,43 @@ void main() {
 let gl, program, rafId, resizeObserver;
 const startTime = performance.now();
 let glReady = false;
+
+let coverSongs      = [];
+let coversResizeObs = null;
+let canvasDpr       = 1;
+let activeHoverIdx  = -1;
+let coversAnimRaf   = null;
+
+function easeOutElastic(t) {
+  if (t === 0 || t === 1) return t;
+  const c4 = (2 * Math.PI) / 3;
+  return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+}
+
+function startCoversAnim(canvas) {
+  if (coversAnimRaf) cancelAnimationFrame(coversAnimRaf);
+  const DURATION = 1020;
+  const start = performance.now();
+  function tick(now) {
+    const elapsed = now - start;
+    let stillGoing = false;
+    coverSongs.forEach(s => {
+      const t = Math.max(0, Math.min(1, (elapsed - s.animDelay) / DURATION));
+      s.animScale = easeOutElastic(t);
+      if (t < 1) stillGoing = true;
+    });
+    drawCovers(canvas, activeHoverIdx);
+    coversAnimRaf = stillGoing ? requestAnimationFrame(tick) : null;
+  }
+  coversAnimRaf = requestAnimationFrame(tick);
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 function hexToRgb(hex) {
   return [
@@ -529,51 +583,234 @@ function buildResults(pl, palette, songs) {
     startRender();
   }
 
-  buildDots(songs, blobPositions);
+  buildCovers(songs, blobPositions, palette);
 }
 
-function buildDots(songs, blobPositions) {
+function buildCovers(songs, blobPositions, palette) {
+  if (coversAnimRaf) { cancelAnimationFrame(coversAnimRaf); coversAnimRaf = null; }
+  activeHoverIdx = -1;
+
   const layer = document.getElementById('dotsLayer');
   layer.innerHTML = '';
 
-  songs.forEach((song, i) => {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+  layer.appendChild(canvas);
+
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.style.position = 'absolute';
+  layer.appendChild(tip);
+
+  // Deduplicate by album — one cover per album, collecting all track titles
+  const albumMap = new Map();
+  songs.forEach(song => {
+    if (!albumMap.has(song.albumId)) {
+      albumMap.set(song.albumId, { ...song, titles: [song.title] });
+    } else {
+      albumMap.get(song.albumId).titles.push(song.title);
+    }
+  });
+  const uniqueSongs = Array.from(albumMap.values());
+
+  coverSongs = uniqueSongs.map(song => {
     let x, y;
     if (song.clusterIdx >= 0 && blobPositions[song.clusterIdx]) {
       const [bx, by] = blobPositions[song.clusterIdx];
-      x = Math.max(0.06, Math.min(0.94, bx + (Math.random()-0.5)*0.55));
-      y = Math.max(0.06, Math.min(0.94, by + (Math.random()-0.5)*0.45));
+      x = Math.max(0.09, Math.min(0.91, bx + (Math.random() - 0.5) * 0.54));
+      y = Math.max(0.09, Math.min(0.91, by + (Math.random() - 0.5) * 0.44));
     } else {
-      x = 0.1 + Math.random()*0.8;
-      y = 0.1 + Math.random()*0.8;
+      x = 0.09 + Math.random() * 0.82;
+      y = 0.09 + Math.random() * 0.82;
+    }
+    const rotation   = (Math.random() - 0.5) * 20;
+    const clusterHex = (song.clusterIdx >= 0 && palette[song.clusterIdx])
+      ? palette[song.clusterIdx].hex : song.color;
+    return { ...song, x, y, rotation, clusterHex, img: null, animScale: 0, animDelay: 0 };
+  });
+
+  function sizeCanvas() {
+    canvasDpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width  = Math.round(canvas.clientWidth  * canvasDpr);
+    canvas.height = Math.round(canvas.clientHeight * canvasDpr);
+  }
+
+  let loaded = 0;
+  function onLoad() {
+    if (++loaded >= coverSongs.length) {
+      sizeCanvas();
+      coverSongs.forEach(s => { s.animDelay = Math.random() * 700; s.animScale = 0; });
+      startCoversAnim(canvas);
+    }
+  }
+  if (!coverSongs.length) { sizeCanvas(); drawCovers(canvas, -1); }
+  coverSongs.forEach((s, i) => {
+    if (!s.coverUrl) { onLoad(); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { coverSongs[i].img = img; onLoad(); };
+    img.onerror = onLoad;
+    img.src = s.coverUrl;
+  });
+
+  if (coversResizeObs) coversResizeObs.disconnect();
+  coversResizeObs = new ResizeObserver(() => { sizeCanvas(); drawCovers(canvas, activeHoverIdx); });
+  coversResizeObs.observe(layer);
+
+  function getHovered(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = clientX - rect.left;
+    const my = clientY - rect.top;
+    let nearest = -1, nearestDist = 40;
+    coverSongs.forEach((s, i) => {
+      const d = Math.hypot(mx - s.x * rect.width, my - s.y * rect.height);
+      if (d < nearestDist) { nearestDist = d; nearest = i; }
+    });
+    return nearest;
+  }
+
+  canvas.addEventListener('mousemove', e => {
+    const idx = getHovered(e.clientX, e.clientY);
+    if (idx !== activeHoverIdx) {
+      activeHoverIdx = idx;
+      drawCovers(canvas, activeHoverIdx);
+    }
+    if (activeHoverIdx >= 0) {
+      canvas.style.cursor = 'pointer';
+      const rect = canvas.getBoundingClientRect();
+      showCoverTip(tip, coverSongs[activeHoverIdx], rect.width, rect.height);
+    } else {
+      canvas.style.cursor = '';
+      tip.style.opacity = '0';
+    }
+  });
+
+  canvas.addEventListener('click', e => {
+    const idx = getHovered(e.clientX, e.clientY);
+    if (idx >= 0 && coverSongs[idx].albumUrl) {
+      window.open(coverSongs[idx].albumUrl, '_blank', 'noopener');
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    activeHoverIdx = -1;
+    drawCovers(canvas, -1);
+    tip.style.opacity = '0';
+    canvas.style.cursor = '';
+  });
+}
+
+function drawCovers(canvas, hoveredIdx) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !canvas.width || !canvas.height) return;
+
+  const dpr  = canvasDpr;
+  const w    = canvas.width;
+  const h    = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const SIZE      = 80 * dpr;
+  const HOVERSIZE = 94 * dpr;
+  const RADIUS    = 8  * dpr;
+
+  const order = coverSongs.map((_, i) => i)
+    .sort((a, b) => (a === hoveredIdx ? 1 : 0) - (b === hoveredIdx ? 1 : 0));
+
+  for (const i of order) {
+    const s    = coverSongs[i];
+    if (!s.img) continue;
+    const isHov = i === hoveredIdx;
+    const size  = isHov ? HOVERSIZE : SIZE;
+    const half  = size / 2;
+    const px    = s.x * w;
+    const py    = s.y * h;
+    const ang   = s.rotation * Math.PI / 180;
+
+    const scale = s.animScale ?? 1;
+    if (scale <= 0) continue;
+
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(ang);
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = '#000';
+    if (isHov) {
+      // Pass 1: drop shadow
+      ctx.shadowColor   = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur    = 12 * dpr;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 4 * dpr;
+      ctx.beginPath(); ctx.roundRect(-half, -half, size, size, RADIUS); ctx.fill();
+      // Pass 2: cluster color glow
+      ctx.shadowColor   = hexToRgba(s.color, 0.55);
+      ctx.shadowBlur    = 20 * dpr;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.beginPath(); ctx.roundRect(-half, -half, size, size, RADIUS); ctx.fill();
+    } else {
+      ctx.shadowColor   = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur    = 12 * dpr;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 4 * dpr;
+      ctx.beginPath(); ctx.roundRect(-half, -half, size, size, RADIUS); ctx.fill();
     }
 
-    const dot = document.createElement('div');
-    dot.className = 'sdot';
-    dot.style.left = (x*100)+'%';
-    dot.style.top  = (y*100)+'%';
-    dot.style.setProperty('--song-color', song.color);
-    dot.style.backgroundColor = 'rgba(255,255,255,0.25)';
-    dot.style.borderColor     = 'rgba(255,255,255,0.15)';
-    dot.style.animationDelay  = (550 + i*60)+'ms';
+    // Clip and overlay image (shadow off)
+    ctx.shadowColor   = 'rgba(0,0,0,0)';
+    ctx.shadowBlur    = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.beginPath();
+    ctx.roundRect(-half, -half, size, size, RADIUS);
+    ctx.clip();
+    ctx.drawImage(s.img, -half, -half, size, size);
 
-    const center = document.createElement('div');
-    center.className = 'sdot-center';
-    center.style.background = song.color;
+    ctx.restore();
 
-    const tip = document.createElement('div');
-    tip.className = x > 0.60 ? 'tip tip-left' : 'tip';
-    tip.innerHTML =
-      `<div class="tip-title">${song.title}</div>`+
-      `<div class="tip-artist">${song.artist}</div>`+
-      `<div class="tip-hex">`+
-        `<div class="hex-dot" style="background:${song.color}"></div>`+
-        `<span class="hex-val">${song.color}</span>`+
-      `</div>`;
+    // Border pass (outside clip)
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(ang);
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = isHov ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.25)';
+    ctx.lineWidth   = isHov ? 2 * dpr : Math.max(1, dpr);
+    ctx.beginPath();
+    ctx.roundRect(-half, -half, size, size, RADIUS);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
 
-    dot.appendChild(center);
-    dot.appendChild(tip);
-    layer.appendChild(dot);
-  });
+function showCoverTip(tip, song, w, h) {
+  const isLeft = song.x > 0.60;
+  tip.className = isLeft ? 'tip tip-left' : 'tip';
+
+  const trackList = song.titles?.length
+    ? `<ul class="tip-others">${song.titles.map(t => `<li>${t}</li>`).join('')}</ul>`
+    : '';
+
+  tip.innerHTML =
+    `<div class="tip-top">` +
+      `<div class="tip-title">${song.albumName}</div>` +
+      `<div class="tip-artist">${song.artist}</div>` +
+      trackList +
+    `</div>` +
+    `<div class="tip-hex">` +
+      `<div class="hex-dot" style="background:${song.clusterHex}"></div>` +
+      `<span class="hex-val">${song.clusterHex}</span>` +
+    `</div>`;
+  const cx = song.x * w;
+  const cy = song.y * h;
+  tip.style.top       = cy + 'px';
+  tip.style.transform = 'translateY(-50%)';
+  if (isLeft) {
+    tip.style.left  = '';
+    tip.style.right = (w - cx + 16) + 'px';
+  } else {
+    tip.style.left  = (cx + 16) + 'px';
+    tip.style.right = '';
+  }
+  tip.style.opacity = '1';
 }
 
 function goBack() {
