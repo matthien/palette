@@ -6,16 +6,17 @@
   <title>palette</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+  <canvas class="aurora-canvas" id="auroraCanvas"></canvas>
+
   <!-- ── LANDING ── -->
   <div class="screen active" id="landing">
-    <p class="landing-byline">Matthew Thien</p>
     <div class="landing-inner">
-      <h1 class="tagline">Find your musical color palette</h1>
+      <h1 class="tagline">Playlist Palette</h1>
       <p class="subtitle">Your playlist favorites, translated into color.</p>
       <button class="spotify-btn" id="spotifyBtn">
         <svg class="spotify-icon" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" aria-hidden="true">
@@ -24,6 +25,7 @@
         Continue with Spotify
       </button>
     </div>
+    <p class="landing-byline">built by matthew thien</p>
   </div>
 
   <!-- ── PICKER ── -->
