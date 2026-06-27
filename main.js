@@ -215,8 +215,20 @@ function extractColor(imgUrl) {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const [r,g,b] = new ColorThief().getColor(img);
-        resolve('#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''));
+        const thief = new ColorThief();
+        const palette = thief.getPalette(img, 6);
+        const best = palette
+          .map(([r,g,b], i) => {
+            const hex = '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+            const [L,a,bv] = hexToLab(hex);
+            const chroma = Math.sqrt(a*a + bv*bv);
+            const dominance = Math.pow(0.85, i);
+            const score = dominance * (1 + chroma / 40);
+            return { hex, score, L };
+          })
+          .filter(c => c.L > 10)
+          .sort((a,b) => b.score - a.score)[0];
+        resolve(best?.hex || null);
       } catch { resolve(null); }
     };
     img.onerror = () => resolve(null);
@@ -226,7 +238,7 @@ function extractColor(imgUrl) {
 
 async function buildPalette(tracks) {
 
-  const selected = tracks.slice(0, 25);
+  const selected = tracks.slice(0, 50);
   const results = await Promise.all(
     selected.map(async t => {
       const imgUrl = t.album.images[0]?.url;
@@ -318,7 +330,7 @@ void main() {
   for (int i = 0; i < N; i++) {
     vec2 d = uv - uPositions[i];
     d.x *= aspect;
-    float sigma = 0.04 + uWeights[i] * 0.10;
+    float sigma = 0.025 + uWeights[i] * 0.16;
     float w = exp(-dot(d, d) / sigma);
     col         += uColors[i] * w;
     totalWeight += w;
@@ -421,7 +433,7 @@ function initGL() {
 function updateGLUniforms(palette, blobPositions) {
   if (!gl || !program) return;
   const maxCount = Math.max(...palette.map(c => c.count));
-  const weights  = palette.map(c => Math.sqrt(c.count / maxCount));
+  const weights  = palette.map(c => Math.pow(c.count / maxCount, 1.8));
   gl.uniform3fv(gl.getUniformLocation(program, 'uColors'),    new Float32Array(palette.flatMap(c => hexToRgb(c.hex))));
   gl.uniform2fv(gl.getUniformLocation(program, 'uPositions'), new Float32Array(blobPositions.flat()));
   gl.uniform1fv(gl.getUniformLocation(program, 'uWeights'),   new Float32Array(weights));
@@ -568,14 +580,33 @@ async function startGenerate(pl) {
   }
 }
 
+function placeBlobsSeparated(n) {
+  const positions = [];
+  const MIN_DIST = 0.25;
+  const MAX_TRIES = 60;
+  for (let i = 0; i < n; i++) {
+    let best = null, bestMinDist = -1;
+    for (let t = 0; t < MAX_TRIES; t++) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = 0.30 + Math.random() * 0.32;
+      const pos = [0.5 + Math.cos(angle) * r, 0.5 + Math.sin(angle) * r * 0.75];
+      let minDist = Infinity;
+      for (const p of positions) {
+        const dx = pos[0] - p[0], dy = pos[1] - p[1];
+        minDist = Math.min(minDist, Math.sqrt(dx*dx + dy*dy));
+      }
+      if (minDist === Infinity || minDist >= MIN_DIST) { best = pos; break; }
+      if (minDist > bestMinDist) { bestMinDist = minDist; best = pos; }
+    }
+    positions.push(best);
+  }
+  return positions;
+}
+
 function buildResults(pl, palette, songs) {
   document.getElementById('plistName').textContent = pl.name;
 
-  const blobPositions = palette.map(() => {
-    const angle = Math.random() * Math.PI * 2;
-    const r = 0.22 + Math.random() * 0.22;
-    return [0.5 + Math.cos(angle)*r, 0.5 + Math.sin(angle)*r*0.75];
-  });
+  const blobPositions = placeBlobsSeparated(palette.length);
 
   if (!glReady) glReady = initGL();
   if (glReady) {
@@ -613,16 +644,52 @@ function buildCovers(songs, blobPositions, palette) {
   });
   const uniqueSongs = Array.from(albumMap.values());
 
+  const MIN_COVER_DIST = 0.065;
+  const MAX_COVER_TRIES = 80;
+  const placed = [];
+
+  const clusterCounts = new Array(blobPositions.length).fill(0);
+  uniqueSongs.forEach(s => { if (s.clusterIdx >= 0) clusterCounts[s.clusterIdx]++; });
+
+  const blobSafeRadius = blobPositions.map((bp, i) => {
+    let minD = Infinity;
+    blobPositions.forEach((bp2, j) => {
+      if (i === j) return;
+      const dx = bp[0] - bp2[0], dy = bp[1] - bp2[1];
+      minD = Math.min(minD, Math.sqrt(dx*dx + dy*dy));
+    });
+    return Math.min(minD * 0.42, 0.28);
+  });
+
   coverSongs = uniqueSongs.map(song => {
-    let x, y;
-    if (song.clusterIdx >= 0 && blobPositions[song.clusterIdx]) {
-      const [bx, by] = blobPositions[song.clusterIdx];
-      x = Math.max(0.09, Math.min(0.91, bx + (Math.random() - 0.5) * 0.54));
-      y = Math.max(0.09, Math.min(0.91, by + (Math.random() - 0.5) * 0.44));
-    } else {
-      x = 0.09 + Math.random() * 0.82;
-      y = 0.09 + Math.random() * 0.82;
+    let x, y, best = null, bestMinDist = -1;
+
+    const safeR = song.clusterIdx >= 0 ? blobSafeRadius[song.clusterIdx] : 0.20;
+    const count = song.clusterIdx >= 0 ? clusterCounts[song.clusterIdx] : 1;
+    const spread = Math.min(Math.sqrt(count) * 0.09, safeR);
+
+    for (let t = 0; t < MAX_COVER_TRIES; t++) {
+      let cx, cy;
+      if (song.clusterIdx >= 0 && blobPositions[song.clusterIdx]) {
+        const [bx, by] = blobPositions[song.clusterIdx];
+        cx = Math.max(0.09, Math.min(0.91, bx + (Math.random() - 0.5) * spread * 2.0));
+        cy = Math.max(0.09, Math.min(0.91, by + (Math.random() - 0.5) * spread * 1.5));
+      } else {
+        cx = 0.09 + Math.random() * 0.82;
+        cy = 0.09 + Math.random() * 0.82;
+      }
+      let minDist = Infinity;
+      for (const p of placed) {
+        const dx = cx - p[0], dy = cy - p[1];
+        minDist = Math.min(minDist, Math.sqrt(dx*dx + dy*dy));
+      }
+      if (minDist === Infinity || minDist >= MIN_COVER_DIST) { best = [cx, cy]; break; }
+      if (minDist > bestMinDist) { bestMinDist = minDist; best = [cx, cy]; }
     }
+
+    [x, y] = best;
+    placed.push([x, y]);
+
     const rotation   = (Math.random() - 0.5) * 20;
     const clusterHex = (song.clusterIdx >= 0 && palette[song.clusterIdx])
       ? palette[song.clusterIdx].hex : song.color;
@@ -796,8 +863,8 @@ function showCoverTip(tip, song, w, h) {
       trackList +
     `</div>` +
     `<div class="tip-hex">` +
-      `<div class="hex-dot" style="background:${song.clusterHex}"></div>` +
-      `<span class="hex-val">${song.clusterHex}</span>` +
+      `<div class="hex-dot" style="background:${song.color}"></div>` +
+      `<span class="hex-val">${song.color}</span>` +
     `</div>`;
   const cx = song.x * w;
   const cy = song.y * h;

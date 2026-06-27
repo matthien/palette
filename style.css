@@ -100,7 +100,7 @@ html, body {
   top: 16px;
   left: 16px;
   z-index: 30;
-  background: rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.35);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255,255,255,0.15);
@@ -115,7 +115,7 @@ html, body {
   transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 .logout-btn:hover {
-  background: rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.50);
   border-color: rgba(255,255,255,0.22);
   color: #fff;
 }
@@ -413,7 +413,7 @@ html, body {
   align-items: center;
   gap: 6px;
   width: fit-content;
-  background: rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.35);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255,255,255,0.15);
@@ -428,7 +428,7 @@ html, body {
   transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 .back-btn:hover {
-  background: rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.50);
   border-color: rgba(255,255,255,0.22);
   color: #fff;
 }
@@ -437,7 +437,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.35);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-radius: 8px;

@@ -488,9 +488,19 @@ async function loadImageColor(url, thief) {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const [r, g, b] = thief.getColor(img);
-        const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-        resolve({ url, hex, error: null });
+        const palette = thief.getPalette(img, 6);
+        const best = palette
+          .map(([r,g,b], i) => {
+            const hex = '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+            const [L,a,bv] = hexToLab(hex);
+            const chroma = Math.sqrt(a*a + bv*bv);
+            const dominance = Math.pow(0.65, i);
+            const score = dominance * (1 + chroma / 40);
+            return { hex, score, L };
+          })
+          .filter(c => c.L > 10)
+          .sort((a,b) => b.score - a.score)[0];
+        resolve({ url, hex: best?.hex || null, error: best ? null : 'No color found' });
       } catch (e) {
         resolve({ url, hex: null, error: 'Color Thief failed: ' + e.message });
       }
